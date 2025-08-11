@@ -1,16 +1,18 @@
-ARG BASE_VERSION="15.0.20231010-debian-11-r1"
-FROM bitnami/odoo:$BASE_VERSION
+ARG BASE_VERSION="17.0-20250807"
+FROM odoo:$BASE_VERSION
 
-ARG PACKAGING_REPO_COMMIT_HASH=main
-LABEL PACKAGING_REPO_COMMIT_HASH=${PACKAGING_REPO_COMMIT_HASH}
+USER root
 
-ENV LIMIT_TIME_REAL=150
-ENV SERVER_WIDE_MODULES=web
+RUN ln -s $(which python3) /usr/bin/python
 
-ADD tmpdir /opt/bitnami/odoo/extraaddons
-ADD docker-build.sh /opt/bitnami/odoo/extraaddons/
-ADD post-init-openg2p.sh /
+ADD tmpdir /opt/odoo/extraaddons
+ADD docker-build.sh /
+RUN /docker-build.sh
+RUN rm /docker-build.sh
 
-RUN /opt/bitnami/odoo/extraaddons/docker-build.sh
-RUN TO_REPLACE=$(grep "libodoo.sh" /opt/bitnami/scripts/odoo/run.sh); \
-    sed -i "s#$TO_REPLACE#$TO_REPLACE\n/post-init-openg2p.sh#g" /opt/bitnami/scripts/odoo/run.sh
+ADD entrypoint.sh /
+
+USER odoo
+
+ENTRYPOINT [ "/entrypoint.sh" ]
+CMD [ "odoo" ]

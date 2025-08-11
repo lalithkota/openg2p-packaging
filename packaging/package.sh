@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
+set -o pipefail
 
 export_from_packages(){
   if [ -f $1 ]; then
@@ -27,7 +28,7 @@ export_from_env(){
   set +a
 }
 
-get_final_prefix(){
+get_final_env_prefix(){
   PREFIX=$1
   PACKAGE_FILE_NAME=$(basename $2 ".txt")
   PACKAGE_FILE_NAME=${PACKAGE_FILE_NAME//\./_}
@@ -52,38 +53,46 @@ get_vars_from_prefix(){
   export PACKAGES_VARS
 }
 
-PREFIX="G2P_PACKAGE_"
-TMPDIR="tmpdir"
-GIT_PREFIX="git://"
-FILE_PREFIX="file://"
-
-if [ $# -ge 1 ] ; then
+download_packages(){
   PACKAGE_TXT_PATH="$1"
-else
-  PACKAGE_TXT_PATH="packages.txt"
-fi
+  PREFIX="$2"
+  TMPDIR="$3"
 
-PREFIX=$(get_final_prefix $PREFIX $PACKAGE_TXT_PATH)
+  PREFIX=$(get_final_env_prefix $PREFIX $PACKAGE_TXT_PATH)
 
-export_from_packages $PACKAGE_TXT_PATH $PREFIX
-if [ -f .env ]; then
-  export_from_env .env
-fi
-
-get_vars_from_prefix $PREFIX
-
-rm -rf $TMPDIR
-mkdir $TMPDIR
-
-for i in ${!PACKAGES_VARS[@]}; do
-  package_value=${PACKAGES_VALUES[i]}
-  if [[ ${PACKAGES_VALUES[i]} == "$GIT_PREFIX"* ]]; then
-    package_value=${package_value#"$GIT_PREFIX"}
-    branch_name=${package_value%%"//"*}
-    git_address=${package_value#*"//"}
-    git clone --depth 1 -b ${branch_name} ${git_address} $TMPDIR/${PACKAGES_VARS[i]}
-  elif [[ ${PACKAGES_VALUES[i]} == "$FILE_PREFIX"* ]]; then
-    package_value=${package_value#"$FILE_PREFIX"}
-    cp -r $package_value $TMPDIR/${PACKAGES_VARS[i]}
+  export_from_packages $PACKAGE_TXT_PATH $PREFIX
+  if [ -f .env ]; then
+    export_from_env .env
   fi
-done
+
+  get_vars_from_prefix $PREFIX
+
+  rm -rf $TMPDIR
+  mkdir $TMPDIR
+
+  GIT_PREFIX=${GIT_PREFIX:-"git://"}
+  FILE_PREFIX=${FILE_PREFIX:-"file://"}
+
+  for i in ${!PACKAGES_VARS[@]}; do
+    package_value=${PACKAGES_VALUES[i]}
+    if [[ ${PACKAGES_VALUES[i]} == "$GIT_PREFIX"* ]]; then
+      package_value=${package_value#"$GIT_PREFIX"}
+      branch_name=${package_value%%"//"*}
+      git_address=${package_value#*"//"}
+      git clone --depth 1 -b ${branch_name} ${git_address} $TMPDIR/${PACKAGES_VARS[i]}
+    elif [[ ${PACKAGES_VALUES[i]} == "$FILE_PREFIX"* ]]; then
+      package_value=${package_value#"$FILE_PREFIX"}
+      cp -r $package_value $TMPDIR/${PACKAGES_VARS[i]}
+    fi
+  done
+}
+
+if [[ "$0" == "$BASH_SOURCE" ]]; then
+  if [ $# -lt 1 ] ; then
+    echo "Package txt path argument missing" 1>&2
+    exit 1
+  fi
+  ENV_PREFIX=${ENV_PREFIX:-"G2P_PACKAGE_"}
+  TMPDIR=${TMPDIR:-"tmpdir"}
+  download_packages $1 $ENV_PREFIX $TMPDIR
+fi
